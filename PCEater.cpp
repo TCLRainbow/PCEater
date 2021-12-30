@@ -5,6 +5,7 @@
 #include <future>
 #include <cmath>
 #include <sstream>
+#include <omp.h>
 #include "flags.h"
 
 using namespace std;
@@ -170,57 +171,60 @@ uint32_t benchmark(const string& t, const uint16_t& target) {
     return size;
 }
 
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "openmp-use-default-none"
 int main() {
-    const auto cores = thread::hardware_concurrency();
-    cout << "©2021 Dim. All rights reserved." << endl;
-    cout << "PCEater v1.2.1 compiled with gcc " << __VERSION__ << " " << PCEaterFlags << endl;
+    const uint8_t cores = thread::hardware_concurrency();
+    cout << "©2021 Dim. All rights reserved." << endl
+    << "PCEater v1.3 compiled with gcc " << __VERSION__ << " " << PCEaterFlags << endl;
     printf("Your CPU has %d cores. ", cores);
     cout << "PLEASE OPEN TASK MANAGER->Performance WHEN TRYING THIS PROGRAM!" << endl;
     while (true) {
-        cout << endl << "-------------------------------------------------------" << endl;
-        cout << "RAM usage experiments:" << endl;
-        cout << "1. 1 core spamming 8 bytes with 0 each time (A few MB/s)" << endl;
-        cout << "2. 1 core spamming 200kB with 0 each time (Max RAM + A few MB/s page file)" << endl;
-        cout << "3. 1 core create a 250k x 250k integer table (Max 1 core + Max RAM + Max page file)" << endl;
-        cout << "-------------------------------------------------------" << endl;
-        cout << "CPU usage experiments:" << endl;
-        cout << "4. 1 core create a 25kx25k integer table, flip it horizontally then vertically. (Max 1 core, ~1.3s)" << endl;
-        cout << "5. All cores create a 25kx25k integer table, flip it horizontally then vertically. (Max all cores, ~0.94s)" << endl;
-        cout << "6. 1 core create a 25kx100k integer table, flip it horizontally then vertically. (Max 1 core, 10GB RAM, ~5.1s)" << endl;
-        cout << "7. All cores create a 25kx100k integer table, flip it horizontally then vertically. (Max all cores, 10GB RAM, ~3.7s)" << endl;
-        cout << "-------------------------------------------------------" << endl;
-        cout << "Dim's Pascal Pythagoras theorem benchmark" << endl;
-        cout << "8. Single core" << endl;
-        cout << "9. All cores (Can take 15-20min because my benchmark is very precise)" << endl;
-        cout << endl << "Please enter a number: ";
+        cout << endl << "-------------------------------------------------------" << endl
+        << "RAM usage experiments:" << endl
+        << "1. 1 core spamming 8 bytes with 0 each time (A few MB/s)" << endl
+        << "2. 1 core spamming 200kB with 0 each time (Max RAM + A few MB/s page file)" << endl
+        << "3. 1 core create a 250k x 250k integer table (Max 1 core + Max RAM + Max page file)" << endl
+        << "-------------------------------------------------------" << endl
+        << "CPU usage experiments:" << endl
+        << "4. 1 core create a 25kx25k integer table, flip it horizontally then vertically. (Max 1 core, ~1.3s)" << endl
+        << "5. All cores create a 25kx25k integer table, flip it horizontally then vertically. (Max all cores, ~0.94s)" << endl
+        << "6. 1 core create a 25kx100k integer table, flip it horizontally then vertically. (Max 1 core, 10GB RAM, ~5.1s)" << endl
+        << "7. All cores create a 25kx100k integer table, flip it horizontally then vertically. (Max all cores, 10GB RAM, ~3.7s)" << endl
+        << "-------------------------------------------------------" << endl
+        << "Dim's Pascal Pythagoras theorem benchmark" << endl
+        << "8. Single core" << endl
+        << "9. All cores (std::async)" << endl
+        << "10. All cores (OpenMP)" << endl
+        << endl << "Please enter an option: ";
 
         string input;
         cin >> input;
 
-        switch (input[0]) {
-            case '1':
+        switch (atoi(input.c_str())) {
+            case 1:
                 ram_easy();
-            case '2':
+            case 2:
                 ram_normal();
-            case '3':
+            case 3:
                 cpu_ram_extreme();
                 break;
-            case '4':
+            case 4:
                 cpu_hard(25000, "");
                 break;
-            case '5':
+            case 5:
                 multi_cpu_hard(25000, cores);
                 break;
-            case '6':
+            case 6:
                 cpu_hard(100000, "");
                 break;
-            case '7':
+            case 7:
                 multi_cpu_hard(100000, cores);
                 break;
-            case '8':
+            case 8:
                 benchmark("", get_benchmark_target());
                 break;
-            case '9': {
+            case 9: {
                 uint16_t target = get_benchmark_target();
 
                 future<uint32_t> jobs[cores];
@@ -243,8 +247,27 @@ int main() {
                 print_time(start_time, "Total time elapsed");
                 break;
             }
+            case 10: {
+                uint16_t target = get_benchmark_target();
+                uint32_t scores[cores];
+                auto start_time = chrono::high_resolution_clock::now();
+                #pragma omp parallel for
+                for (uint8_t i = 0; i < cores; i++) {
+                    scores[i] = benchmark("[" + to_string(i+1) + "] ", target);
+                }
+                cout << "=============Scores=============" << endl;
+                uint32_t total = 0;
+                for (uint16_t i = 0; i < cores; i++) {
+                    total += scores[i];
+                    printf("[%d: %d\n", i+1, scores[i]);
+                }
+                printf("Total score: %d. Average: %d ", total, total / cores);
+                print_time(start_time, "Total time elapsed");
+                break;
+            }
             default:
                 cout << "I don't understand that." << endl << endl;
         }
     }
 }
+#pragma clang diagnostic pop

@@ -1,3 +1,12 @@
+# Compiling
+CMake is used to generate `flags.h` such that the compiled executable would show compile flags during compile time.  
+You can bypass this by creating `flags.h` in the root directory with the following line:
+```c
+#define PCEaterFlags ""
+```
+g++ is the recommended compiler because I used ``__VERSION__`` macro in `main()`.
+Any C++ compilers with this macro can compile the project, and if yours don't have it, you can edit my code.
+
 # Dim's Pascal Pythagoras theorem benchmark
 Let `a = pyth(b, c)` be the syntax of Pythagoras theorem such that if `a = pyth(3, 4)` then `a` equals to 5.  
 Let `list[n]` be the syntax of retrieving the n-th element in a list such that `[1, 2][0] -> 1`.  
