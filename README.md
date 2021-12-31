@@ -1,12 +1,15 @@
 # Compiling
-CMake is used to generate `flags.h` such that the compiled executable would show compile flags during compile time.  
+CMake is used to generate `flags.h` such that the compiled executable would show compile flags that are used during compile time.  
 You can bypass this by creating `flags.h` in the root directory with the following line:
 ```c
 #define PCEaterFlags ""
 ```
-g++ is the recommended compiler because I used ``__VERSION__`` macro in `main()`.
-Any C++ compilers with this macro can compile the project, and if yours don't have it, you can edit my code.
+gcc is the recommended compiler because I used ``__VERSION__`` macro in `main()`.
+Any C++ compilers with this macro can compile the project, and if yours don't have it, you can edit my code.  
+However the C++ compiler should support OpenMP.
 
+
+You also need Boost. Download Boost from their site and decompress in `lib` dir. You need `lib/boost/boost`
 # Dim's Pascal Pythagoras theorem benchmark
 Let `a = pyth(b, c)` be the syntax of Pythagoras theorem such that if `a = pyth(3, 4)` then `a` equals to 5.  
 Let `list[n]` be the syntax of retrieving the n-th element in a list such that `[1, 2][0] -> 1`.  
@@ -30,7 +33,6 @@ The benchmark works like this:
 
 More details:
 * `Target` is the time used to determine whether a test is successful or not.
-  * This is defined as 5000ms.
-  * If a test took >5000ms to execute, it is considered a fail and will step down.
+  * If a test took >`Target`ms to execute, it is considered a fail and will step down.
 * `Step limit` is the time used to determine whether the next test should step up or not.
   * If `Step limit` < current test's elapsed time < `Target` then step up.

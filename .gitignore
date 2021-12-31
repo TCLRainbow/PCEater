@@ -1,6 +1,7 @@
 cmake-*
 flags.h
 .idea
+lib/boost
 
 CMakeLists.txt.user
 CMakeCache.txt
