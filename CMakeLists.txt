@@ -11,3 +11,4 @@ include_directories(
 file(WRITE ${PROJECT_SOURCE_DIR}/flags.h "#define PCEaterFlags \"${CMAKE_CXX_FLAGS}\"")
 
 add_executable(PCEater PCEater.cpp)
+target_link_libraries(PCEater ${PROJECT_SOURCE_DIR}/lib/libOpenCL.a)

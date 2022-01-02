@@ -4,11 +4,18 @@
 #include <thread>
 #include <future>
 #include <cmath>
-#include <sstream>
 #include <omp.h>
 #include "flags.h"
+#include <boost/compute/core.hpp>
+#include <boost/compute/algorithm/transform.hpp>
+#include <boost/compute/container/vector.hpp>
+#include <boost/compute/algorithm/iota.hpp>
+#include <boost/compute/algorithm/adjacent_difference.hpp>
 
 using namespace std;
+namespace compute = boost::compute;
+
+#define step_factor 8
 
 [[noreturn]] void ram_easy() {
     uint64_t i = 0;
@@ -127,23 +134,23 @@ uint16_t get_benchmark_target() {
 
 uint32_t benchmark(const string& t, const uint16_t& target) {
     long elapsed;
-    uint32_t size = 2;
+    uint32_t size = 6000;
     uint16_t step = 65535;
     bool run = true;
-    const uint8_t step_factor = 8;
     uint16_t limit = target - step_factor * 16;
 
     while (run) {
         auto start_time = chrono::high_resolution_clock::now();
 
         vector<double> v(size);
-        for (uint32_t d = 0; d < size; d++) {
-            v[d] = d+1;
+        for (uint32_t i = 0; i < size; ++i) {
+            v[i] = i*i;
         }
         while (v.size() > 1) {
-            for (uint64_t d = 0; d < v.size() - 1; d++) v[d] = sqrt(v[d]*v[d] + v[d+1]*v[d+1]);
+            for (uint64_t d = 0; d < v.size() - 1; d++) v[d] += v[d+1];
             v.pop_back();
         }
+        v[0] = sqrt(v[0]);
         elapsed = (chrono::high_resolution_clock::now() - start_time) / chrono::milliseconds(1);
         uint64_t count = (size * (size - 1)) >> 1;
 
@@ -171,14 +178,65 @@ uint32_t benchmark(const string& t, const uint16_t& target) {
     return size;
 }
 
+BOOST_COMPUTE_FUNCTION(double, square, (double x),
+{
+   return x*x;
+});
+
+uint32_t cl_benchmark(const compute::device& gpu, const uint16_t& target) {
+    printf("This GPU has %d Compute Units.\n", gpu.compute_units());
+    compute::context ctx(gpu);
+    compute::command_queue queue(ctx, gpu);
+    long elapsed;
+    uint32_t size = 6000;
+    uint16_t step = 1024;
+    bool run = true;
+    uint16_t limit = target - step_factor * 16;
+
+    while (run) {
+        auto start_time = chrono::high_resolution_clock::now();
+        compute::vector<double> v(size, ctx);
+        compute::iota(v.begin(), v.end(), 1, queue);
+        compute::transform(  // b^2 and c^2 in one function
+                v.begin(), v.end(), v.begin(), square, queue
+        );
+        for (uint32_t temp_size = size; temp_size > 1; temp_size--) {
+            compute::adjacent_difference( // b^2 + c^2
+                    v.begin(), v.end(), v.begin(), compute::plus<double>(), queue
+            );
+            v.erase(v.begin(), queue);
+        }
+        compute::transform( // sqrt(a)
+                v.begin(), v.end(), v.begin(), compute::sqrt<double>(), queue
+        );
+        print_time(start_time, "Done");
+        cout << size << endl;
+        size += step;
+        auto allocate_time = chrono::high_resolution_clock::now();
+        auto time = (allocate_time - start_time) / chrono::milliseconds(1);
+        run = time < target;
+    }
+    return size;
+}
+
+void display_cl_dev() {
+    cout << "Detecting OpenCL devices..." << endl;
+    uint8_t i = 0;
+    for (auto & device : compute::system::devices()) {
+        i++;
+        printf("%d. %s | %s | %s\n", i, device.vendor().c_str(), device.name().c_str(), device.version().c_str());
+    }
+}
+
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "openmp-use-default-none"
 int main() {
     const uint8_t cores = thread::hardware_concurrency();
     cout << "©2021 Dim. All rights reserved." << endl
-    << "PCEater v1.3 compiled with gcc " << __VERSION__ << " " << PCEaterFlags << endl;
-    printf("Your CPU has %d cores. ", cores);
-    cout << "PLEASE OPEN TASK MANAGER->Performance WHEN TRYING THIS PROGRAM!" << endl;
+    << "PCEater v1.3 compiled with gcc " << __VERSION__ << " " << PCEaterFlags << endl
+    << "Using Boost " << BOOST_VERSION / 100000 << "." << BOOST_VERSION / 100 % 1000 << "." << BOOST_VERSION % 100
+    << ", OpenCL " << CL_TARGET_OPENCL_VERSION / 100 << "." << CL_TARGET_OPENCL_VERSION / 10 % 10 << " via Boost.Compute" << endl
+    << "Your CPU has " << to_string(cores) << " cores. PLEASE OPEN TASK MANAGER->Performance WHEN TRYING THIS PROGRAM!" << endl;
     while (true) {
         cout << endl << "-------------------------------------------------------" << endl
         << "RAM usage experiments:" << endl
@@ -196,6 +254,7 @@ int main() {
         << "8. Single core" << endl
         << "9. All cores (std::async)" << endl
         << "10. All cores (OpenMP)" << endl
+        << "11. OpenCL device (usually GPU)" << endl
         << endl << "Please enter an option: ";
 
         string input;
@@ -252,9 +311,7 @@ int main() {
                 uint32_t scores[cores];
                 auto start_time = chrono::high_resolution_clock::now();
                 #pragma omp parallel for
-                for (uint8_t i = 0; i < cores; i++) {
-                    scores[i] = benchmark("[" + to_string(i+1) + "] ", target);
-                }
+                for (uint32_t & score : scores) score = benchmark("[" + to_string(omp_get_thread_num()+1) + "] ", target);
                 cout << "=============Scores=============" << endl;
                 uint32_t total = 0;
                 for (uint16_t i = 0; i < cores; i++) {
@@ -264,6 +321,26 @@ int main() {
                 printf("Total score: %d. Average: %d ", total, total / cores);
                 print_time(start_time, "Total time elapsed");
                 break;
+            }
+            case 11: {
+                uint16_t target = get_benchmark_target();
+                display_cl_dev();
+                uint8_t option;
+                do {
+                    cout << "Please enter the ID of GPU that you want to benchmark: ";
+                    string gpu_id;
+                    cin >> gpu_id;
+                    option = atoi(gpu_id.c_str()) - 1;
+                } while (option >= compute::system::device_count());
+
+                uint32_t score = cl_benchmark(compute::system::devices()[option], target);
+                cout << score << endl;
+                break;
+            }
+            case 12: {
+                compute::vector<double> test(100000);
+                compute::iota(test.begin(), test.end(), 1);
+
             }
             default:
                 cout << "I don't understand that." << endl << endl;
